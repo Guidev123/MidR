@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/MidR.csproj" />
+  <Project Path="tests/MidR.UnitTests/MidR.UnitTests.csproj" />
+</Solution>
