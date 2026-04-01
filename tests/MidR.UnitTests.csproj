@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\MidR.csproj" />
+    <ProjectReference Include="..\src\MidR.csproj" />
   </ItemGroup>
 
   <ItemGroup>
