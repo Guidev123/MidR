@@ -1,4 +1,5 @@
-﻿using MidR.Behaviors;
+﻿using MidR.Abstractions;
+using MidR.Behaviors;
 using MidR.Core;
 using MidR.Interfaces;
 using System;
@@ -17,6 +18,8 @@ namespace MidR.DependencyInjection
             var handlerMappings = RegisterHandlers(registry, assemblies);
 
             var notificationTypes = RegisterNotificationHandlers(registry, assemblies);
+
+            RegisterDirectNotificationHandlers(registry, assemblies);
 
             RegisterBehaviors(registry, handlerMappings, behaviorConfig);
 
@@ -103,6 +106,38 @@ namespace MidR.DependencyInjection
             }
 
             return notificationTypes;
+        }
+
+        private static void RegisterDirectNotificationHandlers(HandlerRegistry registry, Assembly[] assemblies)
+        {
+            var registerMethod = typeof(HandlerRegistry)
+                .GetMethod(nameof(HandlerRegistry.RegisterDirectNotificationHandler))!;
+
+            var directHandlerTypes = assemblies.SelectMany(a => a.GetTypes())
+                .Where(t => t.IsClass && !t.IsAbstract && !t.IsGenericTypeDefinition)
+                .Select(t => new { Type = t, Attribute = t.GetCustomAttribute<DirectQueueAttribute>() })
+                .Where(x => x.Attribute is not null);
+
+            foreach (var entry in directHandlerTypes)
+            {
+                var notificationTypes = entry.Type.GetInterfaces()
+                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(INotificationHandler<>))
+                    .Select(i => i.GetGenericArguments()[0]);
+
+                foreach (var notificationType in notificationTypes)
+                {
+                    var method = registerMethod.MakeGenericMethod(notificationType);
+
+                    try
+                    {
+                        method.Invoke(registry, new object[] { new RoutingKey(entry.Attribute!.Key), entry.Type });
+                    }
+                    catch (TargetInvocationException ex) when (ex.InnerException is not null)
+                    {
+                        throw ex.InnerException;
+                    }
+                }
+            }
         }
 
         private static void RegisterNotificationBehaviors(HandlerRegistry handlerRegistry, List<Type> notificationTypes, BehaviorConfiguration behaviorConfiguration)

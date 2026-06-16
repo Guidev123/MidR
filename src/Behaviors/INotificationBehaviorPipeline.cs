@@ -1,4 +1,5 @@
-﻿using MidR.Interfaces;
+﻿using MidR.Abstractions;
+using MidR.Interfaces;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,5 +10,7 @@ namespace MidR.Behaviors
         Task ExecuteAsync(INotification notification, CancellationToken cancellationToken = default);
 
         Task ExecuteConcurrentAsync(INotification notification, CancellationToken cancellationToken = default);
+
+        Task ExecuteDirectAsync(INotification notification, RoutingKey routingKey, CancellationToken cancellationToken = default);
     }
 }

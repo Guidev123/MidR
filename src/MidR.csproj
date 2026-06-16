@@ -41,4 +41,8 @@
 	<ItemGroup>
 		<None Include="image.png" Pack="true" PackagePath="\" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="MidR.UnitTests" />
+	</ItemGroup>
 </Project>

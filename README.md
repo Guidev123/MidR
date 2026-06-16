@@ -160,6 +160,39 @@ await publisher.PublishToBusAsync(new OrderCreatedEvent(orderId, userId));
 
 \---
 
+## Direct Dispatch (routing to a single handler)
+
+By default `PublishAsync` **fans out** to every registered handler of a notification. In some scenarios — notably the **Inbox Pattern** in a modular monolith — an event must be delivered to exactly **one** owning consumer, even though several modules register a handler for the same event type. Fan-out there causes duplicate processing.
+
+Direct Dispatch routes a notification to a single handler identified by a `RoutingKey`. The binding is declared on the handler with `[DirectQueue("key")]`, and resolved at startup — the publish hot path is a single dictionary lookup.
+
+```csharp
+// Define keys as shared constants so publisher and handler can't drift apart.
+public static class InboxRoutes
+{
+    public const string Orders = "orders";
+}
+
+[DirectQueue(InboxRoutes.Orders)]
+public class OrdersInboxHandler : INotificationHandler<OrderPlaced>
+{
+    public Task ExecuteAsync(OrderPlaced notification, CancellationToken ct) { /* ... */ }
+}
+
+// Routed to OrdersInboxHandler only — string converts implicitly to RoutingKey.
+await publisher.PublishAsync(new OrderPlaced(orderId), InboxRoutes.Orders);
+```
+
+Semantics:
+
+- A handler marked `[DirectQueue]` is **excluded from normal fan-out** — `PublishAsync` without a key never invokes it. It is reachable only via the keyed overload.
+- Only the handler bound to the pair `(TNotification, RoutingKey)` runs. Direct Dispatch still flows through the notification **behavior pipeline**.
+- The key must be **unique** per notification type: two handlers bound to the same `(TNotification, key)` throw at startup (inside `AddMidR`).
+- Publishing with a key that has no registered handler throws a descriptive `InvalidOperationException` at runtime.
+- `PublishAsync` without a `RoutingKey` is unchanged — normal fan-out to all non-direct handlers.
+
+\---
+
 ## Behaviors
 
 Behaviors form an ordered pipeline that wraps handler execution, similar to middleware. They are ideal for cross-cutting concerns such as logging, timing, validation, and exception handling.

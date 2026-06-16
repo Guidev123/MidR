@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using MidR.Abstractions;
 using MidR.Behaviors;
 using MidR.Core;
 using MidR.Interfaces;
@@ -73,6 +74,7 @@ namespace MidR.DependencyInjection
 
             RegisterHandlers(services, assemblies, typeof(INotificationHandler<>), allowMultiple: true);
             RegisterHandlers(services, assemblies, typeof(IRequestHandler<,>), allowMultiple: false);
+            RegisterDirectHandlers(services, assemblies);
             RegisterBehaviors(services, behaviorConfig, assemblies);
 
             return new MidRConfiguration(services, assemblies);
@@ -270,12 +272,22 @@ namespace MidR.DependencyInjection
 
         private static void RegisterHandlers(IServiceCollection services, Assembly[] assemblies, Type handlerInterface, bool allowMultiple)
         {
+            var isNotificationHandler = handlerInterface == typeof(INotificationHandler<>);
+
             var types = assemblies.SelectMany(a => a.GetTypes())
                 .Where(t => t.IsClass && !t.IsAbstract)
                 .ToList();
 
             foreach (var type in types)
             {
+                // Direct Dispatch handlers are excluded from the normal fan-out registration so
+                // they are only reachable via PublishAsync(..., RoutingKey). They are self-registered
+                // by RegisterDirectHandlers instead.
+                if (isNotificationHandler && type.GetCustomAttribute<DirectQueueAttribute>() is not null)
+                {
+                    continue;
+                }
+
                 var interfaces = type.GetInterfaces()
                     .Where(i =>
                         i.IsGenericType &&
@@ -292,6 +304,23 @@ namespace MidR.DependencyInjection
                         services.TryAddTransient(iface, type);
                     }
                 }
+            }
+        }
+
+        private static void RegisterDirectHandlers(IServiceCollection services, Assembly[] assemblies)
+        {
+            var directHandlerTypes = assemblies.SelectMany(a => a.GetTypes())
+                .Where(t => t.IsClass && !t.IsAbstract && !t.IsGenericTypeDefinition)
+                .Where(t => t.GetCustomAttribute<DirectQueueAttribute>() is not null)
+                .Where(t => t.GetInterfaces().Any(i =>
+                    i.IsGenericType && i.GetGenericTypeDefinition() == typeof(INotificationHandler<>)))
+                .Distinct();
+
+            foreach (var type in directHandlerTypes)
+            {
+                // Self-register the concrete type so the registry can resolve the exact handler
+                // bound to a routing key via GetRequiredService(concreteType).
+                services.TryAddTransient(type, type);
             }
         }
     }

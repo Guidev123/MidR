@@ -1,4 +1,5 @@
-﻿using MidR.Interfaces;
+﻿using MidR.Abstractions;
+using MidR.Interfaces;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,6 +25,12 @@ namespace MidR.Core
             where TNotification : INotification
         {
             return _publisher.PublishAsync(notification, cancellationToken);
+        }
+
+        public Task PublishAsync<TNotification>(TNotification notification, RoutingKey routingKey, CancellationToken cancellationToken = default)
+            where TNotification : INotification
+        {
+            return _publisher.PublishAsync(notification, routingKey, cancellationToken);
         }
 
         public Task PublishToBusAsync<TNotification>(TNotification notification, CancellationToken cancellationToken = default) where TNotification : INotification

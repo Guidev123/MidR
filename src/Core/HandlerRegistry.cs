@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using MidR.Abstractions;
 using MidR.Behaviors;
 using MidR.Interfaces;
 using System;
@@ -16,6 +17,8 @@ namespace MidR.Core
         private readonly Dictionary<Type, List<NotificationBehaviorExecutor>> _notificationBehaviors = new();
         private readonly Dictionary<Type, Func<IServiceProvider, object, CancellationToken, Task>> _notificationSequentialExecutors = new();
         private readonly Dictionary<Type, Func<IServiceProvider, object, CancellationToken, Task>> _notificationConcurrentExecutors = new();
+        private readonly Dictionary<DirectHandlerKey, Func<IServiceProvider, object, CancellationToken, Task>> _directNotificationExecutors = new();
+        private readonly Dictionary<DirectHandlerKey, Type> _directNotificationHandlerTypes = new();
         private static readonly BehaviorExecutor[] _emptyBehaviorsArray = Array.Empty<BehaviorExecutor>();
         private static readonly NotificationBehaviorExecutor[] _emptyNotificationBehaviorArray = Array.Empty<NotificationBehaviorExecutor>();
         private readonly Dictionary<Type, BehaviorExecutor[]> _behaviorsArrayCache = new();
@@ -79,6 +82,41 @@ namespace MidR.Core
             }
 
             await executor(serviceProvider, notification, cancellationToken);
+        }
+
+        public void RegisterDirectNotificationHandler<TNotification>(RoutingKey key, Type concreteHandlerType)
+            where TNotification : class, INotification
+        {
+            var directKey = new DirectHandlerKey(typeof(TNotification), key);
+
+            if (_directNotificationHandlerTypes.TryGetValue(directKey, out var existing))
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate direct routing key. Both '{existing.FullName}' and '{concreteHandlerType.FullName}' " +
+                    $"are registered for notification '{typeof(TNotification).FullName}' with routing key '{key}'. " +
+                    "A direct routing key must map to exactly one handler.");
+            }
+
+            _directNotificationHandlerTypes[directKey] = concreteHandlerType;
+            _directNotificationExecutors[directKey] = (sp, notification, ct) =>
+            {
+                var handler = (INotificationHandler<TNotification>)sp.GetRequiredService(concreteHandlerType);
+                return handler.ExecuteAsync((TNotification)notification, ct);
+            };
+        }
+
+        public Task ExecuteDirectNotificationHandlerAsync(INotification notification, RoutingKey key, IServiceProvider serviceProvider, CancellationToken cancellationToken = default)
+        {
+            var directKey = new DirectHandlerKey(notification.GetType(), key);
+
+            if (!_directNotificationExecutors.TryGetValue(directKey, out var executor))
+            {
+                throw new InvalidOperationException(
+                    $"No direct handler registered for notification '{notification.GetType().FullName}' " +
+                    $"with routing key '{key}'. Decorate the target handler with [DirectQueue(\"{key}\")].");
+            }
+
+            return executor(serviceProvider, notification, cancellationToken);
         }
 
         public void RegisterBehavior<TRequest, TResponse>(Type concreteBehaviorType, int priority)

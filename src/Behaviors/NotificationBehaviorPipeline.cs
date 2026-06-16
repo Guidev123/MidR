@@ -1,4 +1,5 @@
-﻿using MidR.Core;
+﻿using MidR.Abstractions;
+using MidR.Core;
 using MidR.Interfaces;
 using System;
 using System.Threading;
@@ -19,28 +20,41 @@ namespace MidR.Behaviors
 
         public Task ExecuteAsync(INotification notification, CancellationToken cancellationToken = default)
         {
-            var notificationType = notification.GetType();
-            var behaviors = _handlerRegistry.GetNotificationBehaviorsArray(notificationType);
-
-            if (behaviors.Length == 0)
-            {
-                return _handlerRegistry.ExecuteNotificationHandlersAsync(notification, _serviceProvider, cancellationToken);
-            }
-
-            return ExecutePipelineAsync(notification, behaviors, 0, _serviceProvider, cancellationToken, isConcurrent: false);
+            return RunAsync(
+                notification,
+                (n, sp, ct) => _handlerRegistry.ExecuteNotificationHandlersAsync(n, sp, ct),
+                cancellationToken);
         }
 
         public Task ExecuteConcurrentAsync(INotification notification, CancellationToken cancellationToken = default)
         {
-            var notificationType = notification.GetType();
-            var behaviors = _handlerRegistry.GetNotificationBehaviorsArray(notificationType);
+            return RunAsync(
+                notification,
+                (n, sp, ct) => _handlerRegistry.ExecuteNotificationHandlersConcurrentAsync(n, sp, ct),
+                cancellationToken);
+        }
+
+        public Task ExecuteDirectAsync(INotification notification, RoutingKey routingKey, CancellationToken cancellationToken = default)
+        {
+            return RunAsync(
+                notification,
+                (n, sp, ct) => _handlerRegistry.ExecuteDirectNotificationHandlerAsync(n, routingKey, sp, ct),
+                cancellationToken);
+        }
+
+        private Task RunAsync(
+            INotification notification,
+            Func<INotification, IServiceProvider, CancellationToken, Task> terminal,
+            CancellationToken cancellationToken)
+        {
+            var behaviors = _handlerRegistry.GetNotificationBehaviorsArray(notification.GetType());
 
             if (behaviors.Length == 0)
             {
-                return _handlerRegistry.ExecuteNotificationHandlersConcurrentAsync(notification, _serviceProvider, cancellationToken);
+                return terminal(notification, _serviceProvider, cancellationToken);
             }
 
-            return ExecutePipelineAsync(notification, behaviors, 0, _serviceProvider, cancellationToken, isConcurrent: true);
+            return ExecutePipelineAsync(notification, behaviors, 0, _serviceProvider, terminal, cancellationToken);
         }
 
         private Task ExecutePipelineAsync(
@@ -48,20 +62,18 @@ namespace MidR.Behaviors
             NotificationBehaviorExecutor[] behaviors,
             int index,
             IServiceProvider serviceProvider,
-            CancellationToken cancellationToken,
-            bool isConcurrent)
+            Func<INotification, IServiceProvider, CancellationToken, Task> terminal,
+            CancellationToken cancellationToken)
         {
             if (index >= behaviors.Length)
             {
-                return isConcurrent
-                    ? _handlerRegistry.ExecuteNotificationHandlersConcurrentAsync(notification, serviceProvider, cancellationToken)
-                    : _handlerRegistry.ExecuteNotificationHandlersAsync(notification, serviceProvider, cancellationToken);
+                return terminal(notification, serviceProvider, cancellationToken);
             }
 
             var behavior = behaviors[index];
             return behavior.ExecuteTypedAsync(
                 notification,
-                () => ExecutePipelineAsync(notification, behaviors, index + 1, serviceProvider, cancellationToken, isConcurrent),
+                () => ExecutePipelineAsync(notification, behaviors, index + 1, serviceProvider, terminal, cancellationToken),
                 serviceProvider,
                 cancellationToken);
         }
