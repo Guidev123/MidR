@@ -3,6 +3,7 @@ using MidR.Abstractions;
 using MidR.Behaviors;
 using MidR.Interfaces;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -21,8 +22,8 @@ namespace MidR.Core
         private readonly Dictionary<DirectHandlerKey, Type> _directNotificationHandlerTypes = new();
         private static readonly BehaviorExecutor[] _emptyBehaviorsArray = Array.Empty<BehaviorExecutor>();
         private static readonly NotificationBehaviorExecutor[] _emptyNotificationBehaviorArray = Array.Empty<NotificationBehaviorExecutor>();
-        private readonly Dictionary<Type, BehaviorExecutor[]> _behaviorsArrayCache = new();
-        private readonly Dictionary<Type, NotificationBehaviorExecutor[]> _notificationBehaviorArrayCache = new();
+        private readonly ConcurrentDictionary<Type, BehaviorExecutor[]> _behaviorsArrayCache = new();
+        private readonly ConcurrentDictionary<Type, NotificationBehaviorExecutor[]> _notificationBehaviorArrayCache = new();
 
         public void RegisterHandler<TRequest, TResponse>()
             where TRequest : class, IRequest<TResponse>
@@ -138,15 +139,16 @@ namespace MidR.Core
         {
             var notificationType = typeof(TNotification);
 
-            if (!_notificationBehaviors.ContainsKey(notificationType))
+            if (!_notificationBehaviors.TryGetValue(notificationType, out List<NotificationBehaviorExecutor>? value))
             {
-                _notificationBehaviors[notificationType] = new List<NotificationBehaviorExecutor>();
+                value = new List<NotificationBehaviorExecutor>();
+                _notificationBehaviors[notificationType] = value;
             }
 
             var executor = new NotificationBehaviorExecutor<TNotification>(concreteBehaviorType, priority);
-            _notificationBehaviors[notificationType].Add(executor);
+            value.Add(executor);
 
-            _notificationBehaviors[notificationType] = _notificationBehaviors[notificationType].OrderBy(b => b.Priority).ToList();
+            _notificationBehaviors[notificationType] = value.OrderBy(b => b.Priority).ToList();
         }
 
         public async Task<TResponse> ExecuteHandlerAsync<TResponse>(IRequest<TResponse> request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
