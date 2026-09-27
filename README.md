@@ -35,24 +35,40 @@ Call `AddMidR` on your `IServiceCollection`. Pass the assemblies that contain yo
 
 ```csharp
 // Explicit assembly
-builder.Services.AddMidR(args: Assembly.GetExecutingAssembly());
+builder.Services.AddMidR(Assembly.GetExecutingAssembly());
 
 // Multiple assemblies
-builder.Services.AddMidR(args: typeof(CreateOrderHandler).Assembly, typeof(UserHandler).Assembly);
+builder.Services.AddMidR(typeof(CreateOrderHandler).Assembly, typeof(UserHandler).Assembly);
 
 // Auto-scan (no args)
 builder.Services.AddMidR();
 ```
 
-### Concurrency limit for the async bus
+### Configuring the in-memory bus
 
-The optional `maxConcurrency` parameter controls how many notifications the background dispatcher can have in-flight concurrently — i.e., how many are simultaneously awaiting I/O inside their handlers. Defaults to `Environment.ProcessorCount`.
+`AddMidR` wires up the bus behind `PublishToBusAsync` with an unbounded channel and `Environment.ProcessorCount` concurrency by default. Call `.WithMemoryBus` on the returned configuration to customize either.
+
+**Concurrency** controls how many notifications the background dispatcher can have in-flight at once — i.e., how many are simultaneously awaiting I/O inside their handlers.
 
 ```csharp
-builder.Services.AddMidR(maxConcurrency: 4, args: Assembly.GetExecutingAssembly());
+builder.Services.AddMidR(Assembly.GetExecutingAssembly())
+    .WithMemoryBus(MemoryBusOptions.CreateUnbounded(maxConcurrency: 4));
 ```
 
 > The bus dispatches notifications concurrently, not in parallel. Each notification awaits its handlers cooperatively via `Task.WhenAll`, so the limit is about controlling pressure on downstream dependencies (database, HTTP, etc.) rather than CPU usage. Tune this value based on the connection pool size of your heaviest dependency rather than the number of cores.
+
+**Channel type** defaults to unbounded — `PublishToBusAsync` never blocks the caller, but a producer that outruns the dispatcher for long enough can grow the queue without limit. Switch to a bounded channel to apply backpressure instead:
+
+```csharp
+using System.Threading.Channels;
+
+builder.Services.AddMidR(Assembly.GetExecutingAssembly())
+    .WithMemoryBus(MemoryBusOptions.CreateBounded(
+        new BoundedChannelOptions(capacity: 1000) { FullMode = BoundedChannelFullMode.Wait },
+        maxConcurrency: 4));
+```
+
+> With `BoundedChannelFullMode.Wait`, `PublishToBusAsync` itself starts awaiting once the channel is full, instead of failing or dropping — the caller feels the backpressure directly. Pick `DropOldest`/`DropNewest`/`DropWrite` instead if losing notifications under sustained overload is preferable to slowing the publisher down.
 
 \---
 
@@ -245,7 +261,7 @@ public sealed class NotificationLoggingBehavior<TNotification>(ILogger<Notificat
 Chain `.WithBehaviors` after `AddMidR`. The `priority` value controls execution order — lower values run first (outermost in the pipeline).
 
 ```csharp
-builder.Services.AddMidR(args: Assembly.GetExecutingAssembly())
+builder.Services.AddMidR(Assembly.GetExecutingAssembly())
     .WithBehaviors(config =>
     {
         // Request behaviors

@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using MidR.Core;
 using MidR.DependencyInjection;
 using MidR.Interfaces;
 using MidR.UnitTests.Fakes;
+using System.Threading.Channels;
 
 namespace MidR.UnitTests
 {
@@ -17,7 +19,8 @@ namespace MidR.UnitTests
             var host = Host.CreateDefaultBuilder()
                 .ConfigureServices(services =>
                 {
-                    services.AddMidR(1, typeof(MemoryBusTests).Assembly);
+                    services.AddMidR(typeof(MemoryBusTests).Assembly)
+                        .WithMemoryBus(MemoryBusOptions.CreateUnbounded(maxConcurrency: 1));
                 })
                 .Build();
 
@@ -45,9 +48,10 @@ namespace MidR.UnitTests
             var host = Host.CreateDefaultBuilder()
                 .ConfigureServices(services =>
                 {
-                    services.AddMidR(1, typeof(MemoryBusTests).Assembly)
+                    services.AddMidR(typeof(MemoryBusTests).Assembly)
                         .WithBehaviors(b =>
-                            b.AddBehavior(typeof(FakeNotificationBehavior<>)).WithPriority(0));
+                            b.AddBehavior(typeof(FakeNotificationBehavior<>)).WithPriority(0))
+                        .WithMemoryBus(MemoryBusOptions.CreateUnbounded(maxConcurrency: 1));
                 })
                 .Build();
 
@@ -65,6 +69,42 @@ namespace MidR.UnitTests
             Assert.Contains("A:busbhv", FakeNotificationHandlerA.Calls);
 
             await host.StopAsync();
+        }
+
+        [Fact]
+        public void CreateUnbounded_IsTheDefault_AndRespectsMaxConcurrency()
+        {
+            var bus = new MemoryBus(MemoryBusOptions.CreateUnbounded(maxConcurrency: 7));
+
+            Assert.Equal(ChannelType.Unbounded, bus.Options.ChannelType);
+            Assert.Equal(7, bus.Options.MaxConcurrency);
+        }
+
+        [Fact]
+        public async Task Bounded_Channel_AppliesBackpressure_WhenFull()
+        {
+            var bus = new MemoryBus(MemoryBusOptions.CreateBounded(
+                new BoundedChannelOptions(capacity: 1) { FullMode = BoundedChannelFullMode.Wait }));
+
+            await bus.EnqueueAsync(new FakeNotification { Message = "first" }); // fills the single slot
+
+            var secondEnqueue = bus.EnqueueAsync(new FakeNotification { Message = "second" });
+            var completedBeforeAnyRead = await Task.WhenAny(secondEnqueue, Task.Delay(200)) == secondEnqueue;
+
+            Assert.False(completedBeforeAnyRead, "a full bounded channel should block the write instead of completing immediately");
+
+            await bus.Reader.ReadAsync(); // drain one slot
+            await secondEnqueue; // now it should complete
+
+            Assert.True(secondEnqueue.IsCompletedSuccessfully);
+        }
+
+        [Fact]
+        public void Bounded_WithoutBoundedChannelOptions_ThrowsInsteadOfLeavingChannelNull()
+        {
+            var invalidOptions = MemoryBusOptions.CreateBounded(null!);
+
+            Assert.Throws<ArgumentException>(() => new MemoryBus(invalidOptions));
         }
     }
 }

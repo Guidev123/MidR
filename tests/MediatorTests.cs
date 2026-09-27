@@ -13,7 +13,7 @@ namespace MidR.UnitTests
         private IServiceProvider BuildProvider()
         {
             var services = new ServiceCollection();
-            services.AddMidR(0, typeof(MediatorTests).Assembly);
+            services.AddMidR(typeof(MediatorTests).Assembly);
             return services.BuildServiceProvider();
         }
 

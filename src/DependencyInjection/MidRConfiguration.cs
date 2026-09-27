@@ -61,6 +61,30 @@ namespace MidR.DependencyInjection
             return this;
         }
 
+        /// <summary>
+        /// Replaces the in-memory bus configuration used by <c>PublishToBusAsync</c> — for example,
+        /// to switch from the default unbounded channel to a bounded one with backpressure via
+        /// <see cref="MemoryBusOptions.CreateBounded"/>.
+        /// </summary>
+        /// <param name="options">
+        /// The <see cref="MemoryBusOptions"/> instance describing the desired channel and concurrency.
+        /// </param>
+        /// <returns>
+        /// The same <see cref="MidRConfiguration"/> instance, enabling fluent configuration.
+        /// </returns>
+        public MidRConfiguration WithMemoryBus(MemoryBusOptions options)
+        {
+            var oldBusDescriptor = _services.FirstOrDefault(s => s.ServiceType == typeof(MemoryBus));
+            if (oldBusDescriptor is not null)
+            {
+                _services.Remove(oldBusDescriptor);
+            }
+
+            _services.AddSingleton(new MemoryBus(options));
+
+            return this;
+        }
+
         private static void RegisterBehaviors(IServiceCollection services, BehaviorConfiguration behaviorConfig, Assembly[] assemblies)
         {
             var behaviorDescriptors = services.Where(s =>

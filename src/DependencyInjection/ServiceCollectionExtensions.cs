@@ -27,9 +27,13 @@ namespace MidR.DependencyInjection
         /// <returns>
         /// A <see cref="MidRConfiguration"/> instance containing the registered services and resolved assemblies.
         /// </returns>
+        /// <remarks>
+        /// The in-memory bus defaults to an unbounded channel with <c>Environment.ProcessorCount</c> concurrency.
+        /// Call <see cref="MidRConfiguration.WithMemoryBus"/> on the returned configuration to customize it
+        /// (bounded channel, custom concurrency, etc.).
+        /// </remarks>
         public static MidRConfiguration AddMidR(
             this IServiceCollection services,
-            int maxConcurrency = 0,
             params object[] args)
         {
             if (args is null || args.Length == 0)
@@ -58,7 +62,8 @@ namespace MidR.DependencyInjection
             var behaviorConfig = new BehaviorConfiguration();
 
             var registry = RegistryBuilder.BuildRegistry(assemblies, behaviorConfig);
-            var memoryBus = new MemoryBus(maxConcurrency);
+
+            var memoryBus = new MemoryBus(MemoryBusOptions.CreateUnbounded());
 
             services.AddSingleton(registry);
             services.AddScoped<IBehaviorPipeline, BehaviorPipeline>();

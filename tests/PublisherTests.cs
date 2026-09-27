@@ -10,7 +10,7 @@ namespace MidR.UnitTests
         private IServiceProvider BuildProvider(Action<MidRConfiguration>? configure = null)
         {
             var services = new ServiceCollection();
-            var config = services.AddMidR(0, typeof(PublisherTests).Assembly);
+            var config = services.AddMidR(typeof(PublisherTests).Assembly);
             configure?.Invoke(config);
             return services.BuildServiceProvider();
         }

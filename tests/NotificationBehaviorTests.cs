@@ -13,7 +13,7 @@ namespace MidR.UnitTests
         private IServiceProvider BuildProvider(Action<MidRConfiguration>? configure = null)
         {
             var services = new ServiceCollection();
-            var config = services.AddMidR(0, typeof(NotificationBehaviorTests).Assembly);
+            var config = services.AddMidR(typeof(NotificationBehaviorTests).Assembly);
             configure?.Invoke(config);
             return services.BuildServiceProvider();
         }

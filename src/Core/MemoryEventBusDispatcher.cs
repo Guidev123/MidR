@@ -20,7 +20,7 @@ namespace MidR.Core
         {
             _bus = bus;
             _serviceProvider = serviceProvider;
-            _semaphore = new SemaphoreSlim(bus.MaxConcurrency);
+            _semaphore = new SemaphoreSlim(bus.Options.MaxConcurrency);
             _logger = logger;
         }
 

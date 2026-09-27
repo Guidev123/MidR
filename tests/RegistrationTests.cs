@@ -14,7 +14,7 @@ namespace MidR.UnitTests
         public void AddMidR_WithAssembly_RegistersAllServices()
         {
             var services = new ServiceCollection();
-            services.AddMidR(0, typeof(RegistrationTests).Assembly);
+            services.AddMidR(typeof(RegistrationTests).Assembly);
             var provider = services.BuildServiceProvider();
 
             using var scope = provider.CreateScope();
@@ -30,14 +30,14 @@ namespace MidR.UnitTests
             var services = new ServiceCollection();
 
             Assert.Throws<ArgumentException>(() =>
-                services.AddMidR(0, 42));
+                services.AddMidR(42));
         }
 
         [Fact]
         public void AddMidR_WithStringPrefix_ResolvesAssemblies()
         {
             var services = new ServiceCollection();
-            services.AddMidR(0, "MidR");
+            services.AddMidR("MidR");
             var provider = services.BuildServiceProvider();
 
             using var scope = provider.CreateScope();
@@ -48,7 +48,7 @@ namespace MidR.UnitTests
         public void AddMidR_RegistersNotificationHandlersAsMultiple()
         {
             var services = new ServiceCollection();
-            services.AddMidR(0, typeof(RegistrationTests).Assembly);
+            services.AddMidR(typeof(RegistrationTests).Assembly);
             var provider = services.BuildServiceProvider();
 
             using var scope = provider.CreateScope();
