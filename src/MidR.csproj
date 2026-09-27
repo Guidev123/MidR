@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>net6.0;net7.0;net8.0;net9.0;net10.0</TargetFrameworks>
-		<Version>6.0.0</Version>
+		<Version>6.1.0</Version>
 		<Authors>Guilherme</Authors>
 		<Company>GR-Code</Company>
 		<Description>Library that facilitates working with Mediator Pattern</Description>
@@ -12,6 +12,7 @@
 		<Nullable>enable</Nullable>
 		<IsPackable>true</IsPackable>
 		<PackageIcon>image.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -40,5 +41,10 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="MidR.UnitTests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
+		<None Include="..\image.png" Pack="true" PackagePath="\" />
 	</ItemGroup>
 </Project>
